@@ -1,0 +1,80 @@
+#!/bin/bash
+
+#
+# Experiment to ping a list of locations each from
+# the native ping instalation and from a container
+# instalation.
+#
+
+# List of targets
+declare -a TARGETS=(
+  "10.0.0.1"
+)
+
+# Arguments for each ping invocations
+PING_ARGS="-c 5 -i 1 -s 56"
+
+# Native ping commant
+NATIVE_PING_CMD="${HOME}/Dep/iputils/ping"
+
+# Info for running docker
+PING_IMAGE_NAME="chrismisa/contools:ping"
+PING_CONTAINER_NAME="ping-container"
+
+# Experiment book keeping
+DATE_TAG=`date +%Y%m%d%H%M%S`
+META_DATA="Metadata"
+
+SLEEP_CMD="sleep 5"
+B="-----------------------"
+
+#
+# Experiment Start
+#
+
+echo $B Gathering metadata $B
+
+mkdir $DATE_TAG
+cd $DATE_TAG
+
+# Get some basic meta-data
+echo "uname -a -> $(uname -a)" >> $META_DATA
+echo "docker -v -> $(docker -v)" >> $META_DATA
+echo "lsb_release -a -> $(lsb_release -a)" >> $META_DATA
+echo "sudo lshw -> $(sudo lshw)" >> $META_DATA
+
+# Set up containers
+echo $B Spinning up containers . . . $B
+
+# Spin up ping container in native docker
+docker run -itd \
+  --name="$PING_CONTAINER_NAME" \
+  --entrypoint="/bin/bash" \
+  $PING_IMAGE_NAME
+
+# Wait for them to be ready
+until [ "`docker inspect -f {{.State.Running}} $PING_CONTAINER_NAME`" \
+        == "true" ]
+do
+  sleep 1
+done
+
+# Go through target list
+for t in ${TARGETS[@]}
+do
+  echo $B Target: $t $B
+  echo "  native. . ."
+  $SLEEP_CMD
+  $NATIVE_PING_CMD $PING_ARGS $t > native_${t}.ping
+
+  echo "  container. . ."
+  $SLEEP_CMD
+  docker exec $PING_CONTAINER_NAME ping $PING_ARGS $t > container_${t}.ping
+done
+
+# Clean up
+echo $B Cleaning up $B
+docker stop $PING_CONTAINER_NAME
+docker rm $PING_CONTAINER_NAME
+
+echo Done.
