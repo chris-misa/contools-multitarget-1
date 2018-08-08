@@ -8,26 +8,28 @@
 
 # List of targets
 declare -a TARGETS=(
-  "127.0.0.1"       # [loopback]
-  "128.110.154.165" # [source's outbound iface]
-  "128.110.103.241" # [probably utah or cloudlab gateway]
-  "140.197.253.0"   # [Utah Education network]
-  "198.71.45.230"   # [internet2 AS 11537]
-  "162.252.70.155"  # [internet2 AS 11537]
-  "198.32.165.72"   # [CC Service, Inc. AS 10511]
-  "128.23.47.148"   # [probably uoregon firewall AS 3582]
+   "127.0.0.1"       # [loopback]
+   "128.110.153.106" # [source's outbound iface]
+   "140.197.253.0"   # [Utah Education network]
+   "198.71.45.230"   # [internet2 AS 11537]
+   "162.252.70.155"  # [internet2 AS 11537]
+   "128.223.142.244"   # [probably uoregon firewall AS 3582]
 )
 
 # Arguments for each ping invocations
-PING_ARGS="-c 5 -i 1 -s 56"
+PING_ARGS="-c 100 -i 2 -s 56"
 
 # Native ping commant
 NATIVE_PING_CMD="$(pwd)/iputils/ping"
 
 # Info for running docker
-PING_IMAGE_NAME="chrismisa/contools:ping"
+CONTAINER_PING_CMD="/iputils/ping"
+PING_IMAGE_NAME="ping-ubuntu"
 PING_CONTAINER_NAME="ping-container"
 DOCKER_BRIDGE_IPV4="172.17.0.1"
+
+# Info for strace
+STRACE_ARGS="-ttT -e trace=sendto,recvmsg"
 
 # Experiment book keeping
 DATE_TAG=`date +%Y%m%d%H%M%S`
@@ -58,6 +60,8 @@ echo $B Spinning up containers . . . $B
 docker run -itd \
   --name="$PING_CONTAINER_NAME" \
   --entrypoint="/bin/bash" \
+  --cap-add=SYS_PTRACE \
+  -v $(pwd):/experiment \
   $PING_IMAGE_NAME
 
 # Wait for them to be ready
@@ -71,20 +75,36 @@ done
 for t in ${TARGETS[@]}
 do
   echo $B Target: $t $B
-  echo "  native. . ."
+  echo "  native control. . ."
   $SLEEP_CMD
-  $NATIVE_PING_CMD $PING_ARGS $t > native_${t}.ping
+  $NATIVE_PING_CMD $PING_ARGS $t > control_native_${t}.ping
+  echo "  native straced. . ."
+  $SLEEP_CMD
+  strace $STRACE_ARGS -o native_${t}.strace \
+    $NATIVE_PING_CMD $PING_ARGS $t > strace_native_${t}.ping
 
-  echo "  container. . ."
+  echo "  container control. . ."
   $SLEEP_CMD
-  docker exec $PING_CONTAINER_NAME ping $PING_ARGS $t > container_${t}.ping
+  docker exec $PING_CONTAINER_NAME \
+    $CONTAINER_PING_CMD $PING_ARGS $t > control_container_${t}.ping
+  echo "  container straced. . ."
+  $SLEEP_CMD
+  docker exec $PING_CONTAINER_NAME \
+    strace $STRACE_ARGS -o /experiment/container_${t}.strace \
+      $CONTAINER_PING_CMD $PING_ARGS $t > strace_container_${t}.ping
 done
 
 # Grab some container-specific measurment
 echo $B Container-internal targets $B
-echo "  bridge network. . ."
+echo "  bridge network control. . ."
 $SLEEP_CMD
-docker exec $PING_CONTAINER_NAME ping $PING_ARGS $DOCKER_BRIDGE_IPV4 > container_bridge.ping
+docker exec $PING_CONTAINER_NAME \
+  $CONTAINER_PING_CMD $PING_ARGS $DOCKER_BRIDGE_IPV4 > control_container_bridge.ping
+echo "  bridge network straced. . ."
+$SLEEP_CMD
+docker exec $PING_CONTAINER_NAME \
+  strace $STRACE_ARGS -o /experiment/container_bridge.strace \
+   $CONTAINER_PING_CMD $PING_ARGS $DOCKER_BRIDGE_IPV4 > strace_container_bridge.ping
 
 
 # Clean up
