@@ -13,6 +13,7 @@ request = portal.context.makeRequestRSpec()
 
 # Get nodes
 node = request.RawPC("node")
+node.hardware_type="m510"
 
 # Set scripts from repo
 # node1.addService(rspec.Execute(shell="sh", command="/local/repository/initDocker.sh"))
