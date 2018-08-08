@@ -8,18 +8,26 @@
 
 # List of targets
 declare -a TARGETS=(
-  "10.0.0.1"
+  "127.0.0.1"       # [loopback]
+  "128.110.154.165" # [source's outbound iface]
+  "128.110.103.241" # [probably utah or cloudlab gateway]
+  "140.197.253.0"   # [Utah Education network]
+  "198.71.45.230"   # [internet2 AS 11537]
+  "162.252.70.155"  # [internet2 AS 11537]
+  "198.32.165.72"   # [CC Service, Inc. AS 10511]
+  "128.23.47.148"   # [probably uoregon firewall AS 3582]
 )
 
 # Arguments for each ping invocations
 PING_ARGS="-c 5 -i 1 -s 56"
 
 # Native ping commant
-NATIVE_PING_CMD="${HOME}/Dep/iputils/ping"
+NATIVE_PING_CMD="$(pwd)/iputils/ping"
 
 # Info for running docker
 PING_IMAGE_NAME="chrismisa/contools:ping"
 PING_CONTAINER_NAME="ping-container"
+DOCKER_BRIDGE_IPV4="172.17.0.1"
 
 # Experiment book keeping
 DATE_TAG=`date +%Y%m%d%H%M%S`
@@ -71,6 +79,13 @@ do
   $SLEEP_CMD
   docker exec $PING_CONTAINER_NAME ping $PING_ARGS $t > container_${t}.ping
 done
+
+# Grab some container-specific measurment
+echo $B Container-internal targets $B
+echo "  bridge network. . ."
+$SLEEP_CMD
+docker exec $PING_CONTAINER_NAME ping $PING_ARGS $DOCKER_BRIDGE_IPV4 > container_bridge.ping
+
 
 # Clean up
 echo $B Cleaning up $B
